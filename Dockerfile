@@ -4,11 +4,11 @@ WORKDIR /app
 
 RUN useradd -m appuser
 
-COPY app/requirements.txt .
+COPY app1/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ .
+COPY app1/ .
 
 RUN chown -R appuser:appuser /app
 
