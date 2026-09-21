@@ -81,7 +81,7 @@ pipeline {
 
                 bat '''
                     git fetch --tags
-                    git rev-parse v%VERSION%
+                    git rev-parse "refs/tags/v${params.VERSION}^{commit}"
                 '''
             }
         }
