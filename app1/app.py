@@ -16,6 +16,7 @@ def home():
         "version": VERSION,
         "environment": ENVIRONMENT,
         "payment_status": PAYMENT_STATUS
+        "feature": "customer-dashboard"
     })
 
 
