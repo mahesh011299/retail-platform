@@ -1,9 +1,7 @@
 pipeline {
-
     agent any
 
     parameters {
-
         choice(
             name: 'DEPLOYMENT_ACTION',
             choices: ['DEPLOY', 'ROLLBACK'],
@@ -32,9 +30,7 @@ pipeline {
     stages {
 
         stage('Display Parameters') {
-
             steps {
-
                 echo "================================="
                 echo "DEPLOYMENT ACTION = ${params.DEPLOYMENT_ACTION}"
                 echo "ENVIRONMENT       = ${params.ENVIRONMENT}"
@@ -45,28 +41,20 @@ pipeline {
         }
 
         stage('Validate Production') {
-
             steps {
-
                 script {
-
                     if (
                         params.ENVIRONMENT == 'PRODUCTION' &&
                         params.CONFIRM_PROD != 'YES'
                     ) {
-
-                        error(
-                            "Production deployment requires CONFIRM_PROD=YES"
-                        )
+                        error("Production deployment requires CONFIRM_PROD=YES")
                     }
                 }
             }
         }
 
         stage('Checkout') {
-
             steps {
-
                 checkout scm
 
                 bat '''
@@ -76,23 +64,21 @@ pipeline {
         }
 
         stage('Validate Git Tag') {
-             steps {
-              script {
-            def tagName = "v${params.VERSION}"
+            steps {
+                script {
+                    def tagName = "v${params.VERSION}"
 
-            echo "Validating Git tag: ${tagName}"
+                    echo "Validating Git tag: ${tagName}"
 
-            bat """
-                git fetch --tags
-                git rev-parse refs/tags/${tagName}
-            """
-        }
-    }
-}
+                    bat """
+                        git fetch --tags
+                        git rev-parse refs/tags/${tagName}
+                    """
+                }
+            }
         }
 
         stage('Docker Build') {
-
             when {
                 expression {
                     params.DEPLOYMENT_ACTION == 'DEPLOY'
@@ -100,17 +86,14 @@ pipeline {
             }
 
             steps {
-
-                bat '''
-                    docker build -t retail-app:%VERSION% .
-                '''
+                bat """
+                    docker build -t retail-app:${params.VERSION} .
+                """
             }
         }
 
         stage('Docker Images') {
-
             steps {
-
                 bat '''
                     docker images retail-app
                 '''
@@ -118,7 +101,6 @@ pipeline {
         }
 
         stage('Deploy') {
-
             when {
                 expression {
                     params.DEPLOYMENT_ACTION == 'DEPLOY'
@@ -126,25 +108,23 @@ pipeline {
             }
 
             steps {
-
-                bat '''
+                bat """
                     docker rm -f retail-app 2>NUL || exit /b 0
 
                     docker run -d ^
                       --name retail-app ^
                       --network retail-network ^
                       -p 8081:8081 ^
-                      -e APP_VERSION=%VERSION% ^
-                      -e ENVIRONMENT=%ENVIRONMENT% ^
+                      -e APP_VERSION=${params.VERSION} ^
+                      -e ENVIRONMENT=${params.ENVIRONMENT} ^
                       -e PAYMENT_STATUS=fixed ^
                       -e HEALTH_STATUS=healthy ^
-                      retail-app:%VERSION%
-                '''
+                      retail-app:${params.VERSION}
+                """
             }
         }
 
         stage('Health Check') {
-
             when {
                 expression {
                     params.DEPLOYMENT_ACTION == 'DEPLOY'
@@ -152,19 +132,15 @@ pipeline {
             }
 
             steps {
-
                 bat '''
                     timeout /t 10 /nobreak
-
                     curl --fail http://localhost:8081/health
                 '''
             }
         }
 
         stage('Deployment Verification') {
-
             steps {
-
                 bat '''
                     docker ps
                     docker inspect retail-app
@@ -174,9 +150,7 @@ pipeline {
     }
 
     post {
-
         success {
-
             echo "================================="
             echo "DEPLOYMENT SUCCESSFUL"
             echo "VERSION = ${params.VERSION}"
@@ -184,7 +158,6 @@ pipeline {
         }
 
         failure {
-
             echo "================================="
             echo "DEPLOYMENT FAILED"
             echo "================================="
