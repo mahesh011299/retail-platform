@@ -17,6 +17,7 @@ def home():
         "environment": ENVIRONMENT,
         "payment_status": PAYMENT_STATUS
         "feature": "customer-dashboard"
+        "transaction_summary": "enabled"
     })
 
 
