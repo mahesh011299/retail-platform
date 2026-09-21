@@ -9,6 +9,8 @@ pipeline {
     }
 
     environment {
+        // Appends Docker Desktop paths to Jenkins's environment PATH
+        PATH = "C:\\Program Files\\Docker\\Docker\\resources\\bin;C:\\Users\\HP\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;${env.PATH}"
         APP_NAME = "retail-app"
         CANDIDATE_NAME = "retail-app-candidate"
         NETWORK = "retail-network"
