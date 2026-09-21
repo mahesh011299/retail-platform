@@ -1,6 +1,8 @@
 pipeline {
     agent any
-
+    environment {
+        PATH = "C:\\Users\\HP\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;${env.PATH}"
+    }
     parameters {
         choice(
             name: 'DEPLOYMENT_ACTION',
