@@ -1,0 +1,19 @@
+services:
+
+  retail-app:
+    build:
+      context: .
+    container_name: retail-app
+    ports:
+      - "8081:8081"
+    environment:
+      APP_VERSION: "4.2.0"
+      ENVIRONMENT: "production"
+      PAYMENT_STATUS: "working"
+      HEALTH_STATUS: "healthy"
+    networks:
+      - retail-network
+
+networks:
+  retail-network:
+    driver: bridge
