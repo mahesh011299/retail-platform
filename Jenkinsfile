@@ -76,14 +76,19 @@ pipeline {
         }
 
         stage('Validate Git Tag') {
+             steps {
+              script {
+            def tagName = "v${params.VERSION}"
 
-            steps {
+            echo "Validating Git tag: ${tagName}"
 
-                bat '''
-                    git fetch --tags
-                    git rev-parse "refs/tags/v${params.VERSION}^{commit}"
-                '''
-            }
+            bat """
+                git fetch --tags
+                git rev-parse refs/tags/${tagName}
+            """
+        }
+    }
+}
         }
 
         stage('Docker Build') {
