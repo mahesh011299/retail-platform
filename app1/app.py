@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 VERSION = os.getenv("APP_VERSION", "4.2.0")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
-PAYMENT_STATUS = os.getenv("PAYMENT_STATUS", "working")
+PAYMENT_STATUS = os.getenv("PAYMENT_STATUS", "fixed")
 HEALTH_STATUS = os.getenv("HEALTH_STATUS", "healthy")
 
 
