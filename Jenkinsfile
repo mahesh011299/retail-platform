@@ -1,168 +1,112 @@
 pipeline {
     agent any
-    environment {
-        PATH = "C:\\Users\\HP\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin;${env.PATH}"
-    }
+
     parameters {
-        choice(
-            name: 'DEPLOYMENT_ACTION',
-            choices: ['DEPLOY', 'ROLLBACK'],
-            description: 'Select deployment action'
-        )
+        choice(name: 'DEPLOYMENT_ACTION', choices: ['DEPLOY', 'ROLLBACK'], description: 'Deployment Action')
+        choice(name: 'ENVIRONMENT', choices: ['UAT', 'PRODUCTION'], description: 'Target Environment')
+        string(name: 'VERSION', defaultValue: '4.2.2', description: 'Version Tag')
+        choice(name: 'CONFIRM_PROD', choices: ['NO', 'YES'], description: 'Confirm Production')
+    }
 
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['UAT', 'PRODUCTION'],
-            description: 'Select deployment environment'
-        )
-
-        string(
-            name: 'VERSION',
-            defaultValue: '4.2.1',
-            description: 'Application version'
-        )
-
-        choice(
-            name: 'CONFIRM_PROD',
-            choices: ['NO', 'YES'],
-            description: 'Required for production deployment'
-        )
+    environment {
+        APP_NAME = "retail-app"
+        CANDIDATE_NAME = "retail-app-candidate"
+        NETWORK = "retail-network"
+        PORT = "8081"
+        PREV_IMAGE = "retail-app:4.2.1"
     }
 
     stages {
-
-        stage('Display Parameters') {
-            steps {
-                echo "================================="
-                echo "DEPLOYMENT ACTION = ${params.DEPLOYMENT_ACTION}"
-                echo "ENVIRONMENT       = ${params.ENVIRONMENT}"
-                echo "VERSION           = ${params.VERSION}"
-                echo "CONFIRM PROD      = ${params.CONFIRM_PROD}"
-                echo "================================="
-            }
-        }
-
         stage('Validate Production') {
             steps {
                 script {
-                    if (
-                        params.ENVIRONMENT == 'PRODUCTION' &&
-                        params.CONFIRM_PROD != 'YES'
-                    ) {
-                        error("Production deployment requires CONFIRM_PROD=YES")
+                    if (params.ENVIRONMENT == 'PRODUCTION' && params.CONFIRM_PROD != 'YES') {
+                        error("PRODUCTION deployment rejected: CONFIRM_PROD must be 'YES'.")
                     }
                 }
             }
         }
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-
-                bat '''
-                    git rev-parse HEAD
-                '''
-            }
-        }
-
         stage('Validate Git Tag') {
             steps {
-                script {
-                    def tagName = "v${params.VERSION}"
-
-                    echo "Validating Git tag: ${tagName}"
-
-                    bat """
-                        git fetch --tags
-                        git rev-parse refs/tags/${tagName}
-                    """
-                }
+                bat """
+                    git fetch --tags
+                    git rev-parse refs/tags/v${params.VERSION}
+                """
             }
         }
 
         stage('Docker Build') {
-            when {
-                expression {
-                    params.DEPLOYMENT_ACTION == 'DEPLOY'
+            steps {
+                bat "docker build -t ${APP_NAME}:${params.VERSION} ."
+            }
+        }
+
+        stage('Deploy & Automated Rollback') {
+            steps {
+                script {
+                    try {
+                        echo "Starting candidate container..."
+                        bat "docker rm -f ${CANDIDATE_NAME} 2>NUL || exit /b 0"
+
+                        // Simulate failure when version is 4.2.2
+                        def simHealth = (params.VERSION == '4.2.2') ? 'unhealthy' : 'healthy'
+
+                        bat """
+                            docker run -d --name ${CANDIDATE_NAME} ^
+                                --network ${NETWORK} ^
+                                -p 8085:8081 ^
+                                -e APP_VERSION=${params.VERSION} ^
+                                -e ENVIRONMENT=${params.ENVIRONMENT} ^
+                                -e PAYMENT_STATUS=fixed ^
+                                -e HEALTH_STATUS=${simHealth} ^
+                                ${APP_NAME}:${params.VERSION}
+                        """
+
+                        echo "Checking candidate health on port 8085..."
+                        sleep time: 10, unit: 'SECONDS'
+                        bat "curl --fail http://localhost:8085/health"
+
+                        echo "Candidate passed! Promoting to active production container..."
+                        bat "docker rm -f ${CANDIDATE_NAME}"
+                        bat "docker rm -f ${APP_NAME} 2>NUL || exit /b 0"
+                        bat """
+                            docker run -d --name ${APP_NAME} ^
+                                --network ${NETWORK} ^
+                                -p ${PORT}:8081 ^
+                                -e APP_VERSION=${params.VERSION} ^
+                                -e ENVIRONMENT=${params.ENVIRONMENT} ^
+                                -e PAYMENT_STATUS=fixed ^
+                                -e HEALTH_STATUS=${simHealth} ^
+                                ${APP_NAME}:${params.VERSION}
+                        """
+                    } catch (Exception e) {
+                        echo "======================================================="
+                        echo "HEALTH CHECK FAILED FOR ${params.VERSION}! INITIATING ROLLBACK."
+                        echo "Restoring previous production image: ${env.PREV_IMAGE}"
+                        echo "======================================================="
+
+                        // Clean up failed candidate container
+                        bat "docker rm -f ${CANDIDATE_NAME} 2>NUL || exit /b 0"
+
+                        // Restore previous working production container
+                        bat "docker rm -f ${APP_NAME} 2>NUL || exit /b 0"
+                        bat """
+                            docker run -d --name ${APP_NAME} ^
+                                --network ${NETWORK} ^
+                                -p ${PORT}:8081 ^
+                                ${env.PREV_IMAGE}
+                        """
+
+                        sleep time: 8, unit: 'SECONDS'
+                        bat "curl --fail http://localhost:${PORT}/health"
+                        echo "Rollback successfully restored ${env.PREV_IMAGE} on port ${PORT}."
+
+                        currentBuild.result = 'FAILURE'
+                        error("Deployment failed; automatic rollback was executed successfully.")
+                    }
                 }
             }
-
-            steps {
-                bat """
-                    docker build -t retail-app:${params.VERSION} .
-                """
-            }
-        }
-
-        stage('Docker Images') {
-            steps {
-                bat '''
-                    docker images retail-app
-                '''
-            }
-        }
-
-        stage('Deploy') {
-            when {
-                expression {
-                    params.DEPLOYMENT_ACTION == 'DEPLOY'
-                }
-            }
-
-            steps {
-                bat """
-                    docker rm -f retail-app 2>NUL || exit /b 0
-
-                    docker run -d ^
-                      --name retail-app ^
-                      --network retail-network ^
-                      -p 8081:8081 ^
-                      -e APP_VERSION=${params.VERSION} ^
-                      -e ENVIRONMENT=${params.ENVIRONMENT} ^
-                      -e PAYMENT_STATUS=fixed ^
-                      -e HEALTH_STATUS=healthy ^
-                      retail-app:${params.VERSION}
-                """
-            }
-        }
-
-        stage('Health Check') {
-            when {
-                expression {
-                    params.DEPLOYMENT_ACTION == 'DEPLOY'
-                }
-            }
-
-            steps {
-                bat '''
-                    timeout /t 10 /nobreak
-                    curl --fail http://localhost:8081/health
-                '''
-            }
-        }
-
-        stage('Deployment Verification') {
-            steps {
-                bat '''
-                    docker ps
-                    docker inspect retail-app
-                '''
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "================================="
-            echo "DEPLOYMENT SUCCESSFUL"
-            echo "VERSION = ${params.VERSION}"
-            echo "================================="
-        }
-
-        failure {
-            echo "================================="
-            echo "DEPLOYMENT FAILED"
-            echo "================================="
         }
     }
 }
